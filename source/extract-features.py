@@ -8,6 +8,17 @@ import csv
 csv_lock = threading.Lock()
 
 
+def lighten_non_tinted(img):
+    for r in range(img.shape[0]):
+        for c in range(img.shape[1]):
+            p = img[r, c]
+            channelMax = np.max(p)
+            channelMin = np.min(p)
+            channelSum = np.sum(p)
+            if channelMax - channelMin < 10 and channelSum > 275:
+                img[r, c] = (255, 255, 255)
+
+
 def create_radial_shadow_mask(h, w, radius=None, center=None):
     # based on https://stackoverflow.com/a/44874588
     if center is None:  # use the middle of the image
@@ -31,7 +42,7 @@ def find_dominant_color(img, mask=None):
 
 
 input_folder = "../data/original"
-output_folder = "../data/test"
+output_folder = "../data/final"
 
 
 def process_image(image):
@@ -54,14 +65,18 @@ def process_image(image):
         radial_spotlight_mask = 1 / radial_shadow_mask
     foreground_color = find_dominant_color(img, radial_spotlight_mask)
 
-    # TODO: try to decrease lower bound
+    # TODO
+    # CEA for color boundaries
     # try to use with lighthen non-tinted
+    # gather more data about the leaf edges
+    # gather all the dominant leaf colors
+    # gather texture information
 
     foreground_mask = cv.inRange(img, foreground_color * 0.6, foreground_color * 1.4)
     if demo:
         cv.imshow("Masked background", foreground_mask)
 
-    background_mask = cv.inRange(img, background_color * 0.6, background_color * 1.4)
+    background_mask = cv.inRange(img, background_color * 0.7, background_color * 1.4)
     if demo:
         cv.imshow("Masked foreground", background_mask)
 
@@ -74,16 +89,12 @@ def process_image(image):
     contours, _ = cv.findContours(thresh, cv.RETR_TREE, cv.CHAIN_APPROX_NONE)
     contour = sorted(contours, key=cv.contourArea)[-min(2, len(contours))]
     if demo:
-        cv.imshow("Image with contour", img)
+        cv.imshow("Original", img)
 
     to_save = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
     to_save = cv.cvtColor(to_save, cv.COLOR_GRAY2BGR)
     contour_width = blur_amount
     cv.drawContours(to_save, contour, -1, (255, 0, 0), contour_width)
-
-    # TODO: extract features from the contour, write them to the csv
-    # write color to the csv
-    # try to extract texture
 
     x, y, w, h = cv.boundingRect(contour)
     aspect_ratio = h / w
@@ -94,7 +105,6 @@ def process_image(image):
     ellipse = cv.fitEllipse(contour)
     a, b = ellipse[1][0] / 2, ellipse[1][1] / 2
     ellipsePerimeter = np.pi * (3 * (a + b) - np.sqrt((3 * a + b) * (a + 3 * b)))
-    ellipseArea = np.pi * a * b
     cv.ellipse(to_save, ellipse, (0, 0, 255), contour_width)
 
     smoothness = ellipsePerimeter / contourPerimeter
@@ -129,6 +139,7 @@ def process_image(image):
             )
 
     if demo:
+        cv.imshow("Final", to_save)
         cv.waitKey()
 
 
@@ -154,7 +165,7 @@ if __name__ == "__main__":
         writer = csv.writer(f)
         writer.writerow(header)
 
-    tested_example = None  # "data/test/rose/20150523_153254.jpg"
+    tested_example = None  # "data/test/ficus/20150622_121546.jpg"
     if tested_example is not None:
         process_image((0, *os.path.normpath(tested_example).split(os.path.sep)[-2:]))
     else:
